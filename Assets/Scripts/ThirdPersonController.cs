@@ -81,18 +81,13 @@ public class ThirdPersonController : MonoBehaviour
 
     private Animator _animator;
     private CharacterController _controller;
-    private StarterAssetsInputs _input;
+    private InputEventReader _input;
     private GameObject _mainCamera;
 
     private const float _threshold = 0.01f;
 
     private bool _hasAnimator;
     private bool isAttacking;
-    public void move(InputAction.CallbackContext context)
-    {
-        context.readValue<>();
-
-    }
     private void Awake()
     {
         // get a reference to our main camera
@@ -106,7 +101,7 @@ public class ThirdPersonController : MonoBehaviour
     {
         _hasAnimator = TryGetComponent(out _animator);
         _controller = GetComponent<CharacterController>();
-        _input = GetComponent<StarterAssetsInputs>();
+        _input = GetComponent<InputEventReader>();
 
         AssignAnimationIDs();
 
@@ -125,7 +120,7 @@ public class ThirdPersonController : MonoBehaviour
         Attack();
         Move();
         // printParameters();
-        print("attacking: " + _input.LightAttack.ToString());
+        print("attacking: " + _input.lightAttack.ToString());
     }
 
     private void Attack()
@@ -138,10 +133,10 @@ public class ThirdPersonController : MonoBehaviour
             // _animator.SetBool("LightAttack", false);
             isAttacking = false;
         }
-        if (_input.LightAttack && _AttackTimeoutDelta <= 0.0f && !isAttacking)
+        if (_input.lightAttack && _AttackTimeoutDelta <= 0.0f && !isAttacking)
         {
             isAttacking = true;
-            print("attacking: " + _input.LightAttack.ToString());
+            print("attacking: " + _input.lightAttack.ToString());
             // _animator.SetBool("LightAttack", true);
             _AttackTimeoutDelta = AttackTimeout;
         }
@@ -168,7 +163,6 @@ public class ThirdPersonController : MonoBehaviour
         // set sphere position, with offset
         Vector3 spherePosition = new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z);
         Grounded = Physics.CheckSphere(spherePosition, GroundedRadius, GroundLayers, QueryTriggerInteraction.Ignore);
-        print("grounded " + Grounded);
         // update animator if using character
         if (_hasAnimator)
         {
@@ -193,8 +187,9 @@ public class ThirdPersonController : MonoBehaviour
         CinemachineCameraTarget.transform.rotation = Quaternion.Euler(_cinemachineTargetPitch + CameraAngleOverride, _cinemachineTargetYaw, 0.0f);
     }
 
-    private void Move()
+    public void Move()
     {
+        print("move");
         // set target speed based on move speed, sprint speed and if sprint is pressed
         float targetSpeed = _input.sprint ? SprintSpeed : MoveSpeed;
 
@@ -208,7 +203,8 @@ public class ThirdPersonController : MonoBehaviour
         float currentHorizontalSpeed = new Vector3(_controller.velocity.x, 0.0f, _controller.velocity.z).magnitude;
 
         float speedOffset = 0.1f;
-        float inputMagnitude = _input.analogMovement ? _input.move.magnitude : 1f;
+        // float inputMagnitude = _input.analogMovement ? _input.move.magnitude : 1f;
+        float inputMagnitude = 1f;
 
         // accelerate or decelerate to target speed
         if (currentHorizontalSpeed < targetSpeed - speedOffset || currentHorizontalSpeed > targetSpeed + speedOffset)
@@ -300,7 +296,6 @@ public class ThirdPersonController : MonoBehaviour
             // Jump
             if (_input.jump && _jumpTimeoutDelta <= 0.0f)
             {
-                print("start jump");
                 // the square root of H * -2 * G = how much velocity needed to reach desired height
                 _verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * Gravity);
 
@@ -365,5 +360,4 @@ public class ThirdPersonController : MonoBehaviour
         // when selected, draw a gizmo in the position of, and matching radius of, the grounded collider
         Gizmos.DrawSphere(new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z), GroundedRadius);
     }
-}
 }
