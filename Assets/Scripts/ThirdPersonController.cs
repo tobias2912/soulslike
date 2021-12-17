@@ -17,6 +17,8 @@ public class ThirdPersonController : MonoBehaviour
     [Tooltip("How fast the character turns to face movement direction")]
     [Range(0.0f, 0.3f)]
     public float RotationSmoothTime = 0.12f;
+
+
     [Tooltip("Acceleration and deceleration")]
     public float SpeedChangeRate = 10.0f;
 
@@ -111,6 +113,10 @@ public class ThirdPersonController : MonoBehaviour
         _AttackTimeoutDelta = AttackTimeout;
     }
 
+    internal void stagger()
+    {
+        _animator.SetTrigger("stagger");
+    }
     private void Update()
     {
         _hasAnimator = TryGetComponent(out _animator);
@@ -129,14 +135,14 @@ public class ThirdPersonController : MonoBehaviour
         if (!Grounded) return;
         if (isAttacking && _AttackTimeoutDelta <= 0.0f)
         {
-            print("reset is attacking");
+            print("reset attack cooldown");
             // _animator.SetBool("LightAttack", false);
             isAttacking = false;
         }
         if (_input.lightAttack && _AttackTimeoutDelta <= 0.0f && !isAttacking)
         {
             isAttacking = true;
-            print("attacking: " + _input.lightAttack.ToString());
+            print("light attack");
             // _animator.SetBool("LightAttack", true);
             _AttackTimeoutDelta = AttackTimeout;
         }
@@ -189,14 +195,12 @@ public class ThirdPersonController : MonoBehaviour
 
     public void Move()
     {
-        print("move");
         // set target speed based on move speed, sprint speed and if sprint is pressed
         float targetSpeed = _input.sprint ? SprintSpeed : MoveSpeed;
 
-        // a simplistic acceleration and deceleration designed to be easy to remove, replace, or iterate upon
+        //brake if in attack state
+        if(isAttacking) targetSpeed = 0f;
 
-        // note: Vector2's == operator uses approximation so is not floating point error prone, and is cheaper than magnitude
-        // if there is no input, set the target speed to 0
         if (_input.move == Vector2.zero) targetSpeed = 0.0f;
 
         // a reference to the players current horizontal velocity
