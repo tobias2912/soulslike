@@ -5,9 +5,9 @@ using UnityEngine.InputSystem;
 /* Note: animations are called via the controller for both the character and capsule using animator null checks
  */
 
-    // [RequireComponent(typeof(CharacterController))]
-    // [RequireComponent(typeof(PlayerInput))]
-public class ThirdPersonController : MonoBehaviour
+// [RequireComponent(typeof(CharacterController))]
+// [RequireComponent(typeof(PlayerInput))]
+public class ThirdPersonController : MonoBehaviour, weaponhandler
 {
     [Header("Player")]
     [Tooltip("Move speed of the character in m/s")]
@@ -17,7 +17,6 @@ public class ThirdPersonController : MonoBehaviour
     [Tooltip("How fast the character turns to face movement direction")]
     [Range(0.0f, 0.3f)]
     public float RotationSmoothTime = 0.12f;
-
 
     [Tooltip("Acceleration and deceleration")]
     public float SpeedChangeRate = 10.0f;
@@ -33,7 +32,6 @@ public class ThirdPersonController : MonoBehaviour
     public float JumpTimeout = 0.50f;
     [Tooltip("Time required to pass before entering the fall state. Useful for walking down stairs")]
     public float FallTimeout = 0.15f;
-    public float AttackTimeout = 1.95f;
 
     [Header("Player Grounded")]
     [Tooltip("If the character is grounded or not. Not part of the CharacterController built in grounded check")]
@@ -57,6 +55,14 @@ public class ThirdPersonController : MonoBehaviour
     [Tooltip("For locking the camera position on all axis")]
     public bool LockCameraPosition = false;
 
+    [Header("other")]
+    [SerializeField]
+    private GameObject rightHandObject;
+    [SerializeField]
+    private GameObject healthbar;
+    public float AttackTimeout = 0.8f;
+    public float AttackMultiplier = 1.0f;
+
     // cinemachine
     private float _cinemachineTargetYaw;
     private float _cinemachineTargetPitch;
@@ -78,7 +84,6 @@ public class ThirdPersonController : MonoBehaviour
     private int _animIDSpeed;
     private int _animIDGrounded;
     private int _animIDJump;
-    private int _animIDFreeFall;
     private int _animIDMotionSpeed;
 
     private Animator _animator;
@@ -88,8 +93,10 @@ public class ThirdPersonController : MonoBehaviour
 
     private const float _threshold = 0.01f;
 
-    private bool _hasAnimator;
+    private playerstats playerstats;
     private bool isAttacking;
+    private ActionCounter actionCounter = new ActionCounter();
+
     private void Awake()
     {
         // get a reference to our main camera
@@ -101,9 +108,10 @@ public class ThirdPersonController : MonoBehaviour
 
     private void Start()
     {
-        _hasAnimator = TryGetComponent(out _animator);
+        TryGetComponent(out _animator);
         _controller = GetComponent<CharacterController>();
         _input = GetComponent<InputEventReader>();
+        playerstats = new playerstats();
 
         AssignAnimationIDs();
 
@@ -111,22 +119,29 @@ public class ThirdPersonController : MonoBehaviour
         _jumpTimeoutDelta = JumpTimeout;
         _fallTimeoutDelta = FallTimeout;
         _AttackTimeoutDelta = AttackTimeout;
+        _animator.SetFloat("attackSpeed", AttackMultiplier);
+    }
+
+    public void damage(float damage)
+    {
+        playerstats.damage(damage);
+        healthbar.GetComponent<healthbar>().UpdateHealthBar(playerstats.hp, playerstats.maxhp);
+
     }
 
     internal void stagger()
     {
         _animator.SetTrigger("stagger");
     }
+
     private void Update()
     {
-        _hasAnimator = TryGetComponent(out _animator);
-
         JumpAndGravity();
         GroundedCheck();
         Attack();
         Move();
         // printParameters();
-        print("attacking: " + _input.lightAttack.ToString());
+        actionCounter.updateTime(Time.deltaTime);
     }
 
     private void Attack()
@@ -160,7 +175,6 @@ public class ThirdPersonController : MonoBehaviour
         _animIDSpeed = Animator.StringToHash("speed");
         _animIDGrounded = Animator.StringToHash("Grounded");
         _animIDJump = Animator.StringToHash("Jump");
-        _animIDFreeFall = Animator.StringToHash("FreeFall");
         _animIDMotionSpeed = Animator.StringToHash("MotionSpeed");
     }
 
@@ -170,10 +184,7 @@ public class ThirdPersonController : MonoBehaviour
         Vector3 spherePosition = new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z);
         Grounded = Physics.CheckSphere(spherePosition, GroundedRadius, GroundLayers, QueryTriggerInteraction.Ignore);
         // update animator if using character
-        if (_hasAnimator)
-        {
-            _animator.SetBool("grounded", Grounded);
-        }
+        _animator.SetBool("grounded", Grounded);
     }
 
     private void CameraRotation()
@@ -199,7 +210,7 @@ public class ThirdPersonController : MonoBehaviour
         float targetSpeed = _input.sprint ? SprintSpeed : MoveSpeed;
 
         //brake if in attack state
-        if(isAttacking) targetSpeed = 0f;
+        if (isAttacking) targetSpeed = 0f;
 
         if (_input.move == Vector2.zero) targetSpeed = 0.0f;
 
@@ -246,12 +257,14 @@ public class ThirdPersonController : MonoBehaviour
         // move the player
         _controller.Move(targetDirection.normalized * (_speed * Time.deltaTime) + new Vector3(0.0f, _verticalVelocity, 0.0f) * Time.deltaTime);
 
-        // update animator if using character
-        if (_hasAnimator)
-        {
-            _animator.SetFloat(_animIDSpeed, _animationBlend);
-            // _animator.SetFloat(_animIDMotionSpeed, inputMagnitude);
-        }
+        _animator.SetFloat(_animIDSpeed, _animationBlend);
+    }
+
+    public void Roll(){
+        bool success = actionCounter.addAction("roll", 2f);
+        if(!success) return;
+        print("start roll");
+        _animator.SetTrigger("roll");
     }
 
     private void printParameters()
@@ -285,11 +298,7 @@ public class ThirdPersonController : MonoBehaviour
             // reset the fall timeout timer
             _fallTimeoutDelta = FallTimeout;
 
-            // update animator if using character
-            if (_hasAnimator)
-            {
-                _animator.SetBool("grounded", false);
-            }
+            _animator.SetBool("grounded", false);
 
             // stop our velocity dropping infinitely when grounded
             if (_verticalVelocity < 0.0f)
@@ -304,10 +313,7 @@ public class ThirdPersonController : MonoBehaviour
                 _verticalVelocity = Mathf.Sqrt(JumpHeight * -2f * Gravity);
 
                 // update animator if using character
-                if (_hasAnimator)
-                {
-                    _animator.SetBool("grounded", true);
-                }
+                _animator.SetBool("grounded", true);
             }
 
             // jump timeout
@@ -328,11 +334,7 @@ public class ThirdPersonController : MonoBehaviour
             }
             else
             {
-                // update animator if using character
-                if (_hasAnimator)
-                {
-                    _animator.SetBool("grounded", true);
-                }
+                _animator.SetBool("grounded", true);
             }
 
             // if we are not grounded, do not jump
@@ -363,5 +365,19 @@ public class ThirdPersonController : MonoBehaviour
 
         // when selected, draw a gizmo in the position of, and matching radius of, the grounded collider
         Gizmos.DrawSphere(new Vector3(transform.position.x, transform.position.y - GroundedOffset, transform.position.z), GroundedRadius);
+    }
+
+    public void onWeaponCollision(Collider other, float damage)
+    {
+        bool isStatic = other.gameObject.isStatic;
+        if (isStatic)
+        {
+            stagger();
+        }
+        bool hit = other.gameObject.TryGetComponent<enemy>(out enemy e);
+        if (hit)
+        {
+            e.damage(damage);
+        }
     }
 }
